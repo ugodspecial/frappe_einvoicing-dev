@@ -1,0 +1,73 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"nrsHeader01\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>NRS E-Invoicing</b></span>\", \"col\": 12}}, {\"id\": \"nrsShortc01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"NRS E-Invoice Settings\", \"col\": 3}}, {\"id\": \"nrsShortc02\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Sales Invoice\", \"col\": 3}}, {\"id\": \"nrsShortc03\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Customer\", \"col\": 3}}, {\"id\": \"nrsShortc04\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Item\", \"col\": 3}}, {\"id\": \"nrsShortc05\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Error Log\", \"col\": 3}}, {\"id\": \"nrsLkpHead1\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>Code Lookups</b></span>\", \"col\": 12}}, {\"id\": \"nrsLkpSc01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"HSN / ISIC Code Lookup\", \"col\": 3}}, {\"id\": \"nrsLkpSc02\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"State / LGA Code Lookup\", \"col\": 3}}]",
+ "creation": "2026-08-07 09:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "integration",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "NRS E-Invoicing",
+ "links": [],
+ "modified": "2026-08-07 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Doftwerks NRS E-Invoicing",
+ "name": "NRS E-Invoicing",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 30.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "label": "NRS E-Invoice Settings",
+   "link_to": "NRS E-Invoice Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Sales Invoice",
+   "link_to": "Sales Invoice",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Customer",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Item",
+   "link_to": "Item",
+   "type": "DocType"
+  },
+  {
+   "color": "Red",
+   "doc_view": "List",
+   "label": "Error Log",
+   "link_to": "Error Log",
+   "type": "DocType"
+  },
+  {
+   "label": "HSN / ISIC Code Lookup",
+   "type": "URL",
+   "url": "https://web-tab.netlify.app/"
+  },
+  {
+   "label": "State / LGA Code Lookup",
+   "type": "URL",
+   "url": "https://web-tab.netlify.app/state-lga.html"
+  }
+ ],
+ "title": "NRS E-Invoicing"
+}

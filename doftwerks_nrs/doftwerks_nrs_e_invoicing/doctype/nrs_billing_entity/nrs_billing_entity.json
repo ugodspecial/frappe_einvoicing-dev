@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-31 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "client_id",
+  "client_secret",
+  "business_id",
+  "service_id",
+  "supplier_tin",
+  "supplier_email",
+  "supplier_phone",
+  "supplier_business_description",
+  "supplier_street",
+  "supplier_city",
+  "supplier_postal_zone",
+  "supplier_lga",
+  "supplier_state",
+  "supplier_country"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "reqd": 1
+  },
+  {
+   "fieldname": "business_id",
+   "fieldtype": "Data",
+   "label": "Business ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_id",
+   "fieldtype": "Data",
+   "label": "Service ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier_tin",
+   "fieldtype": "Data",
+   "label": "Supplier TIN",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier_email",
+   "fieldtype": "Data",
+   "label": "Supplier Email"
+  },
+  {
+   "fieldname": "supplier_phone",
+   "fieldtype": "Data",
+   "label": "Supplier Phone"
+  },
+  {
+   "fieldname": "supplier_business_description",
+   "fieldtype": "Data",
+   "label": "Business Description"
+  },
+  {
+   "fieldname": "supplier_street",
+   "fieldtype": "Data",
+   "label": "Street"
+  },
+  {
+   "fieldname": "supplier_city",
+   "fieldtype": "Data",
+   "label": "City"
+  },
+  {
+   "fieldname": "supplier_postal_zone",
+   "fieldtype": "Data",
+   "label": "Postal Zone"
+  },
+  {
+   "fieldname": "supplier_lga",
+   "fieldtype": "Data",
+   "label": "LGA Code"
+  },
+  {
+   "fieldname": "supplier_state",
+   "fieldtype": "Data",
+   "label": "State Code"
+  },
+  {
+   "default": "NG",
+   "fieldname": "supplier_country",
+   "fieldtype": "Data",
+   "label": "Country"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-01 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Doftwerks NRS E-Invoicing",
+ "name": "NRS Billing Entity",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

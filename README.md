@@ -31,19 +31,19 @@ Transmit Sales Invoices to the **Nigeria Revenue Service (NRS)** directly from E
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
-bench get-app https://github.com/doftwerks-dev/frappe_einvoicing --branch main
+bench get-app https://github.com/ugodspecial/frappe_einvoicing-dev --branch main
 bench --site yoursite.com install-app doftwerks_nrs
 ```
 
 ## Setup
 
 1. Open **NRS E-Invoice Settings** (search bar, the **NRS E-Invoicing** workspace in the sidebar, or the Apps screen tile).
-2. Under **Billing Entities**, add a row per Company: select the Company and enter the credentials and supplier details issued by Doftwerks.
+2. Under **Billing Entities**, add a row per Company: select the Company and enter the credentials and supplier details issued by your Access Point Provider.
 3. Click **Test Connection** to verify the credentials against the platform.
 4. On each **Customer** (Tax tab): set NRS TIN, State Code, LGA Code, and mark B2B customers. An email address and a billing address with street and city are required by NRS.
 5. On each **Item** (Tax tab): set the HSN code (goods, `0000.00` format) or ISIC code (services), the product/service category, the NRS tax code, and tick *Is Service* for service items.
 6. Tick **Enabled** (and leave **Auto Transmit on Submit** on) and save.
-7. Ask Doftwerks to register your site's webhook URL so statuses update in real time - the settings page shows it with a **Copy Webhook URL** button:
+7. Register your site's webhook URL with your Access Point Provider so statuses update in real time - the settings page shows it with a **Copy Webhook URL** button:
    `https://yoursite.com/api/method/doftwerks_nrs.einvoice.webhook`
 
 Submit a Sales Invoice — the NRS E-Invoicing section on the invoice shows the IRN, receipt status, and QR code. If anything is rejected, the NRS Error field explains exactly what to fix, and a **Retry NRS Transmission** button appears once you have.

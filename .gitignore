@@ -6,3 +6,5 @@ tags
 node_modules
 __pycache__
 .claude/
+skills.md
+PHASE2_IMPLEMENTATION_PLAN.md

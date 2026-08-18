@@ -1,4 +1,4 @@
-# Doftwerks NRS E-Invoicing — Project Context
+# YoungAndCode NRS E-Invoicing — Project Context
 
 **Purpose:** the single, current source of truth for anyone (human or AI assistant) working on this app. Update it as phases complete and as the platform teaches us new rules.
 
@@ -8,13 +8,13 @@
 
 ## 1. What this project is
 
-A Frappe/ERPNext app, `doftwerks_nrs`, that transmits Sales Invoices to the Nigeria Revenue Service (NRS) through the **Doftwerks E-Invoice Access Point** platform. Intended for the Frappe Cloud Marketplace.
+A Frappe/ERPNext app, `doftwerks_nrs`, that transmits Sales Invoices to the Nigeria Revenue Service (NRS) through an NRS-accredited E-Invoice Access Point platform. Intended for the Frappe Cloud Marketplace.
 
-It is a port of a working Zoho Books integration that Doftwerks ran in production for three legal entities. Domain logic below was proven live — first in Zoho, now re-proven from this app (five live transmissions including a service-line invoice and a credit note).
+It is a port of a working Zoho Books integration. Domain logic below was proven live.
 
-**Owner:** Doftwerks West Africa Limited (technology practice of Stransact Chartered Accountants, Lagos). Doftwerks holds dual NRS accreditation as System Integrator and Access Point Provider.
+**Owner:** YoungAndCode LTD.
 
-**Platform base URL:** `https://einvoice.doftwerks.com`
+**Platform base URL:** Dependent on selected provider.
 
 ---
 

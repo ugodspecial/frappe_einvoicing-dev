@@ -1,4 +1,4 @@
-# Copyright (c) 2026, Doftwerks West Africa Limited and contributors
+# Copyright (c) 2026, YoungAndCode LTD and contributors
 # For license information, please see license.txt
 
 """

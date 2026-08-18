@@ -37,7 +37,7 @@ required_apps = ["erpnext"]
 # 	{
 # 		"name": "doftwerks_nrs",
 # 		"logo": "/assets/doftwerks_nrs/logo.png",
-# 		"title": "Doftwerks NRS E-Invoicing",
+# 		"title": "NRS E-Invoicing",
 # 		"route": "/doftwerks_nrs",
 # 		"has_permission": "doftwerks_nrs.api.permission.has_app_permission"
 # 	}

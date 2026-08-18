@@ -1,4 +1,4 @@
-# Copyright (c) 2026, Doftwerks West Africa Limited and contributors
+# Copyright (c) 2026, YoungAndCode LTD and contributors
 # For license information, please see license.txt
 
 import frappe
@@ -9,6 +9,9 @@ except ImportError:
 from frappe.utils import getdate
 
 import doftwerks_nrs.einvoice as einvoice
+from doftwerks_nrs.providers.doftwerks import DoftwerksProvider
+
+einvoice_provider = DoftwerksProvider()
 
 ENTITY = frappe._dict(
 	company="Test Entity Co",
@@ -189,31 +192,30 @@ class TestFriendlyErrors(FrappeTestCase):
 	def test_specific_before_general(self):
 		# supplier credential mismatch must outrank the generic customer-TIN match
 		self.assertEqual(
-			einvoice._friendly_error("TAX ID mismatch: supplier tin wrong"),
-			einvoice.SUPPLIER_TIN_MISMATCH_MESSAGE,
+			einvoice_provider.get_friendly_error("TAX ID mismatch: supplier tin wrong"),
+			DoftwerksProvider.FRIENDLY_ERRORS[2][1],  # "mismatch" message
 		)
 
 	def test_tin_is_word_bounded(self):
 		# "Accounting" contains the substring "tin" — must NOT match
-		got = einvoice._friendly_error("Accounting parties APP might be busy")
+		got = einvoice_provider.get_friendly_error("Accounting parties APP might be busy")
 		self.assertEqual(got, einvoice.OFFLINE_MESSAGE)
 
 	def test_customer_tin_still_matches(self):
-		got = einvoice._friendly_error("accountingcustomerparty.tin is required")
+		got = einvoice_provider.get_friendly_error("accountingcustomerparty.tin is required")
 		self.assertIn("Customer", got)
 		self.assertIn("TIN", got)
 
 	def test_classification_and_unknown(self):
 		self.assertEqual(
-			einvoice._friendly_error("hsn_code is invalid"),
-			einvoice.ITEM_CLASSIFICATION_MESSAGE,
+			einvoice_provider.get_friendly_error("hsn_code is invalid"),
+			DoftwerksProvider.FRIENDLY_ERRORS[10][1],  # "hsn" message
 		)
-		self.assertEqual(einvoice._friendly_error("never seen before"), "never seen before")
+		self.assertEqual(einvoice_provider.get_friendly_error("never seen before"), "never seen before")
 
 
-class TestHandleResponse(FrappeTestCase):
+class TestParseResponse(FrappeTestCase):
 	def test_signed_but_offline_is_success(self):
-		doc = MiniDoc()
 		response = FakeResponse(
 			200,
 			{
@@ -224,31 +226,31 @@ class TestHandleResponse(FrappeTestCase):
 				"data": [],
 			},
 		)
-		einvoice._handle_response(doc, {"irn": "X-AB12CD34-20260101"}, response)
-		self.assertEqual(doc.written["nrs_irn"], "X-AB12CD34-20260101")
-		self.assertEqual(doc.written["nrs_receipt_status"], "SIGNED")
-		self.assertEqual(doc.written["nrs_error"], "")
+		result = einvoice_provider.parse_response(response, {"irn": "X-AB12CD34-20260101"})
+		self.assertTrue(result["success"])
+		self.assertEqual(result["irn"], "X-AB12CD34-20260101")
+		self.assertEqual(result["status"], "SIGNED")
+		self.assertEqual(result["error"], "")
 
 	def test_full_success_maps_status(self):
-		doc = MiniDoc()
 		response = FakeResponse(
 			200,
 			{"code": 0, "status": "success", "message": "ok", "data": {"irn": "REAL-IRN", "receipt_status": 4}},
 		)
-		einvoice._handle_response(doc, {"irn": "LOCAL-IRN"}, response)
-		self.assertEqual(doc.written["nrs_irn"], "REAL-IRN")
-		self.assertEqual(doc.written["nrs_receipt_status"], "TRANSMITTED")
+		result = einvoice_provider.parse_response(response, {"irn": "LOCAL-IRN"})
+		self.assertTrue(result["success"])
+		self.assertEqual(result["irn"], "REAL-IRN")
+		self.assertEqual(result["status"], "TRANSMITTED")
 
 	def test_rejection_writes_friendly_error(self):
-		doc = MiniDoc()
 		response = FakeResponse(
 			422,
 			{"code": 40, "status": "error", "message": "hsn_code is invalid", "data": []},
 		)
-		einvoice._handle_response(doc, {"irn": "LOCAL-IRN"}, response)
-		self.assertEqual(doc.written["nrs_receipt_status"], "REJECTED")
-		self.assertEqual(doc.written["nrs_error"], einvoice.ITEM_CLASSIFICATION_MESSAGE)
-		self.assertNotIn("nrs_irn", doc.written)
+		result = einvoice_provider.parse_response(response, {"irn": "LOCAL-IRN"})
+		self.assertFalse(result["success"])
+		self.assertEqual(result["error"], DoftwerksProvider.FRIENDLY_ERRORS[10][1])  # "hsn" message
+		self.assertEqual(result["irn"], "")
 
 
 class TestBuildPayload(FrappeTestCase):
@@ -321,3 +323,21 @@ class TestBuildPayload(FrappeTestCase):
 		self.assertEqual(payload["legal_monetary_total"]["payable_amount"], 200)
 		# no return_against -> pre-flight error, not a payload crash
 		self.assertTrue(any("original invoice" in e for e in errors))
+
+
+class MockProvider(DoftwerksProvider):
+	PROVIDER_NAME = "mock"
+	def transmit(self, payload, credentials):
+		return {"success": True, "irn": "MOCK-IRN", "status": "TRANSMITTED", "error": ""}
+
+class TestMultiProvider(FrappeTestCase):
+	def test_provider_selection(self):
+		settings = frappe.get_doc("NRS E-Invoice Settings")
+		entity = frappe._dict(provider="mock", company="Test Co")
+		
+		# Register mock provider
+		from doftwerks_nrs.providers import register_provider
+		register_provider(MockProvider)
+		
+		provider = einvoice._get_provider_for_entity(entity, settings)
+		self.assertEqual(provider.PROVIDER_NAME, "mock")

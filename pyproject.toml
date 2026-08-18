@@ -1,9 +1,9 @@
 [project]
 name = "doftwerks_nrs"
 authors = [
-    { name = "Doftwerks West Africa Limited", email = "support@doftwerks.com"}
+    { name = "YoungAndCode LTD", email = "info@youngandcodeltd.com"}
 ]
-description = "NRS e-invoicing for ERPNext via the Doftwerks Access Point"
+description = "NRS e-invoicing for ERPNext"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
@@ -18,8 +18,8 @@ build-backend = "flit_core.buildapi"
 # Frappe/ERPNext versions this app is compatible with (read by Frappe Cloud
 # Marketplace and bench for version resolution)
 [tool.bench.frappe-dependencies]
-frappe = ">=15.0.0,<16.0.0"
-erpnext = ">=15.0.0,<16.0.0"
+frappe = ">=15.0.0,<17.0.0"
+erpnext = ">=15.0.0,<17.0.0"
 
 # These dependencies are only installed when developer mode is enabled
 [tool.bench.dev-dependencies]

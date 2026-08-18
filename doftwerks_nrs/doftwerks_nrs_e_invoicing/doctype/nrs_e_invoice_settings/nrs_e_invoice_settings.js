@@ -4,7 +4,7 @@ frappe.ui.form.on("NRS E-Invoice Settings", {
 			frappe.urllib.get_base_url() + "/api/method/doftwerks_nrs.einvoice.webhook";
 
 		frm.set_intro(
-			__("Webhook URL for the Doftwerks portal (per environment): {0}", [
+			__("Webhook URL for the Access Point Provider portal (per environment): {0}", [
 				`<code>${webhook_url}</code>`,
 			]),
 			"blue"
@@ -44,5 +44,14 @@ frappe.ui.form.on("NRS E-Invoice Settings", {
 				},
 			});
 		});
+	},
+
+	provider(frm) {
+		// Toggle legacy base_url field visibility
+		const is_doftwerks = frm.doc.provider === "doftwerks";
+		frm.toggle_display("base_url", is_doftwerks);
+		
+		// If provider changed, we might want to refresh billing entities table
+		frm.refresh_field("billing_entities");
 	},
 });

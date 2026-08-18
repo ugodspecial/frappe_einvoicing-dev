@@ -1,10 +1,13 @@
-# Copyright (c) 2026, Doftwerks West Africa Limited and contributors
+# Copyright (c) 2026, YoungAndCode LTD and contributors
 # For license information, please see license.txt
 
 """NRS e-invoice transmission for Sales Invoice.
 
 Wired to Sales Invoice on_submit via hooks.doc_events. All writes to the
 (already submitted) invoice go through db_set.
+
+This module uses the provider abstraction layer to support multiple
+NRS Access Point Providers (Doftwerks, Remita, etc.).
 """
 
 import json
@@ -16,6 +19,12 @@ import requests
 from frappe.rate_limiter import rate_limit
 from frappe.contacts.doctype.address.address import get_default_address
 from frappe.utils import cint, cstr, flt, getdate, now, now_datetime, strip_html_tags
+
+from doftwerks_nrs.providers import (
+	get_provider,
+	instantiate_provider,
+	list_provider_names,
+)
 
 SETTINGS_DOCTYPE = "NRS E-Invoice Settings"
 REQUEST_TIMEOUT = 30
@@ -55,83 +64,54 @@ OFFLINE_MESSAGE = (
 	"The invoice was NOT transmitted - retry once the platform is back online."
 )
 
-# (regex needle searched in the platform's error message, plain guidance) - matched top to
-# bottom, so keep specific needles before general ones.
-SUPPLIER_TIN_MISMATCH_MESSAGE = (
-	"NRS reports a TAX ID mismatch: the Supplier TIN configured for this "
-	"Company does not match the TIN registered to these NRS credentials. "
-	"Check the billing entity row in NRS E-Invoice Settings."
-)
-
-ITEM_CLASSIFICATION_MESSAGE = (
-	"NRS rejected an item's classification. Goods need an HSN code in "
-	"0000.00 format, services an ISIC code. "
-	"Check the NRS fields on the invoice's Item(s) and retry."
-)
-
-FRIENDLY_ERRORS = [
-	(
-		"billing_reference",
-		"The original invoice for this credit/debit note has not been transmitted "
-		"to NRS yet. Transmit the original invoice first, then retry.",
-	),
-	(
-		"duplicate",
-		"NRS reports this invoice was already transmitted. Check the earlier "
-		"submission before retrying.",
-	),
-	# supplier credential mismatch (error 17) must outrank the generic "tin" match
-	("mismatch", SUPPLIER_TIN_MISMATCH_MESSAGE),
-	("tax id", SUPPLIER_TIN_MISMATCH_MESSAGE),
-	(
-		"street",
-		"NRS rejected the customer's address: the street is missing or invalid. "
-		"Fix Address Line 1 on the customer's address and retry.",
-	),
-	(
-		"city",
-		"NRS rejected the customer's address: the city is missing or invalid. "
-		"Fix the City on the customer's address and retry.",
-	),
-	(
-		"email",
-		"NRS rejected the customer email address. Set a valid Email ID on the "
-		"Customer and retry.",
-	),
-	(
-		"lga",
-		"NRS rejected the customer's LGA code. Set NRS LGA Code on the Customer "
-		"(Tax tab) and retry.",
-	),
-	(
-		"state",
-		"NRS rejected the customer's state code. Set NRS State Code on the "
-		"Customer (Tax tab) and retry.",
-	),
-	(
-		r"\btin\b",
-		"NRS rejected the customer's TIN. Check the NRS TIN on the Customer "
-		"(Tax tab) and retry.",
-	),
-	("hsn", ITEM_CLASSIFICATION_MESSAGE),
-	("isic", ITEM_CLASSIFICATION_MESSAGE),
-	("category", ITEM_CLASSIFICATION_MESSAGE),
-	(
-		"not found",
-		"NRS has no record of this IRN yet. The invoice may not have been "
-		"transmitted, or the platform's record is delayed - check the "
-		"transmission status and retry later.",
-	),
-	("timed out", OFFLINE_MESSAGE),
-	("timeout", OFFLINE_MESSAGE),
-	("connection", OFFLINE_MESSAGE),
-	("unavailable", OFFLINE_MESSAGE),
-	("offline", OFFLINE_MESSAGE),
-	("busy", OFFLINE_MESSAGE),
-]
-
 def _logger():
 	return frappe.logger("nrs_einvoice")
+
+
+def _get_provider_for_entity(entity, settings):
+	"""Get provider instance for a billing entity.
+	
+	Falls back to settings.provider, then to 'doftwerks' for backward compatibility.
+	"""
+	provider_name = entity.provider or settings.provider or "doftwerks"
+	provider = instantiate_provider(provider_name, settings)
+	if not provider:
+		# Fallback to Doftwerks if provider not found
+		provider_name = "doftwerks"
+		provider = instantiate_provider(provider_name, settings)
+	if not provider:
+		raise Exception(f"Provider '{provider_name}' not found or failed to instantiate")
+	return provider
+
+
+def _get_credentials(entity):
+	"""Extract credentials dict from billing entity.
+	
+	Priority: provider_credentials_json > legacy Doftwerks fields
+	"""
+	if entity.provider_credentials_json:
+		try:
+			return json.loads(entity.provider_credentials_json)
+		except (json.JSONDecodeError, TypeError):
+			pass
+	
+	# Fallback to legacy Doftwerks fields
+	credentials = {}
+	if entity.client_id:
+		credentials["client_id"] = entity.client_id
+	if entity.client_secret:
+		credentials["client_secret"] = entity.get_password("client_secret")
+	if entity.business_id:
+		credentials["business_id"] = entity.business_id
+	if entity.service_id:
+		credentials["service_id"] = entity.service_id
+	
+	# For Doftwerks, also include base_url from settings if not in entity
+	if not credentials.get("base_url"):
+		settings = frappe.get_single(SETTINGS_DOCTYPE)
+		credentials["base_url"] = cstr(settings.base_url).rstrip("/") or "https://api.doftwerks.com"
+	
+	return credentials
 
 
 def transmit_on_submit(doc, method=None):
@@ -150,6 +130,7 @@ def transmit_on_submit(doc, method=None):
 
 
 def transmit_invoice(doc, settings=None):
+	"""Transmit invoice to NRS via the configured provider."""
 	settings = settings or frappe.get_single(SETTINGS_DOCTYPE)
 
 	if doc.nrs_irn:
@@ -169,25 +150,51 @@ def transmit_invoice(doc, settings=None):
 		frappe.log_error(title=f"NRS pre-flight failed for {doc.name}", message=joined)
 		return
 
-	url = f"{cstr(settings.base_url).rstrip('/')}/api/v1/einvoice/transmit"
-	headers = {
-		"x-client-id": entity.client_id,
-		"x-client-secret": entity.get_password("client_secret"),
-		"Content-Type": "application/json",
-		"Accept": "application/json",
-	}
-
+	# Get provider and credentials
 	try:
-		response = requests.post(url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT)
-	except requests.exceptions.RequestException:
-		frappe.log_error(
-			title=f"NRS platform unreachable for {doc.name}",
-			message=frappe.get_traceback(),
-		)
-		_write_status(doc, "FAILED", OFFLINE_MESSAGE)
+		provider = _get_provider_for_entity(entity, settings)
+		credentials = _get_credentials(entity)
+	except Exception as e:
+		_write_status(doc, "FAILED", f"Provider configuration error: {str(e)}")
+		frappe.log_error(title=f"NRS provider error for {doc.name}", message=frappe.get_traceback())
 		return
 
-	_handle_response(doc, payload, response)
+	# Call provider's on_before_transmit hook
+	try:
+		provider.on_before_transmit(doc, payload)
+	except Exception as e:
+		_logger().warning(f"on_before_transmit hook failed: {str(e)}")
+
+	# Transmit via provider
+	result = provider.transmit(payload, credentials)
+
+	# Handle result
+	if result.get("success"):
+		irn = result.get("irn") or payload.get("irn")
+		status = result.get("status") or "TRANSMITTED"
+		qr_code = result.get("qr_code")
+		
+		doc.db_set("nrs_irn", irn, update_modified=False)
+		doc.db_set("nrs_receipt_status", status, update_modified=False)
+		doc.db_set("nrs_time", now(), update_modified=False)
+		doc.db_set("nrs_error", "", update_modified=False)
+		if qr_code:
+			_attach_qr_image(doc, qr_code)
+		
+		_logger().info(f"{doc.name}: transmitted to NRS via {provider.PROVIDER_NAME}, irn={irn}, status={status}")
+	else:
+		error_msg = result.get("error", "Unknown error")
+		_write_status(doc, "FAILED", error_msg)
+		frappe.log_error(
+			title=f"NRS rejected {doc.name}",
+			message=f"Provider: {provider.PROVIDER_NAME}\nError: {error_msg}\nRaw: {result.get('raw_response', {})}",
+		)
+
+	# Call provider's on_after_transmit hook
+	try:
+		provider.on_after_transmit(doc, result)
+	except Exception as e:
+		_logger().warning(f"on_after_transmit hook failed: {str(e)}")
 
 
 def build_payload(doc, entity, errors=None):
@@ -389,45 +396,6 @@ def _build_billing_reference(doc, receipt_type, errors):
 	return [{"irn": original_irn, "issue_date": str(original_date)}]
 
 
-def _handle_response(doc, payload, response):
-	try:
-		body = response.json()
-	except ValueError:
-		body = {}
-
-	message = cstr(body.get("message"))
-	data = body.get("data")
-	if not isinstance(data, dict):
-		# platform sometimes returns data as [] with the state only in the message
-		data = {}
-
-	signed_in_message = "signed" in message.lower()
-	success = bool(data.get("irn") or data.get("receipt_status")) or signed_in_message
-
-	if not success:
-		raw = message or cstr(response.text)[:500] or f"HTTP {response.status_code}"
-		_write_status(doc, "REJECTED", _friendly_error(raw))
-		frappe.log_error(
-			title=f"NRS rejected {doc.name}",
-			message=f"HTTP {response.status_code}\n{cstr(response.text)[:5000]}",
-		)
-		return
-
-	status_label = RECEIPT_STATUS_LABELS.get(cint(data.get("receipt_status")))
-	if not status_label:
-		status_label = "SIGNED" if signed_in_message else "TRANSMITTED"
-
-	irn = data.get("irn") or payload["irn"]
-	doc.db_set("nrs_irn", irn, update_modified=False)
-	doc.db_set("nrs_receipt_status", status_label, update_modified=False)
-	doc.db_set("nrs_time", now(), update_modified=False)
-	doc.db_set("nrs_error", "", update_modified=False)
-	if data.get("qr_code"):
-		_attach_qr_image(doc, data["qr_code"])
-
-	_logger().info(f"{doc.name}: transmitted to NRS, irn={irn}, status={status_label}")
-
-
 def _attach_qr_image(doc, qr_base64):
 	try:
 		content = b64decode(qr_base64)
@@ -464,14 +432,6 @@ def _country_code(address):
 		if code:
 			return code.upper()
 	return "NG"
-
-
-def _friendly_error(raw):
-	low = cstr(raw).lower()
-	for needle, friendly in FRIENDLY_ERRORS:
-		if re.search(needle, low):
-			return friendly
-	return cstr(raw)
 
 
 def _write_status(doc, status, error):
@@ -519,14 +479,84 @@ def webhook():
 		frappe.local.response["http_status_code"] = 400
 		return {"status": "error", "reason": "invalid json"}
 
-	# acknowledge non-status events (e.g. the portal test POST on saving the
+	# Acknowledge non-status events (e.g. the portal test POST on saving the
 	# webhook URL) without touching any invoice
 	event_type = cstr(payload.get("eventType"))
+	
+	# Determine provider from IRN in payload for multi-provider support
+	# Extract IRN from payload first to identify the correct provider
+	data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+	irn = cstr(data.get("irn", "")).strip()
+	
+	settings = frappe.get_single(SETTINGS_DOCTYPE)
+	provider_name = settings.provider or "doftwerks"
+	
+	# If IRN present, find entity and use its provider
+	if irn:
+		entity = _find_entity_by_irn(settings, irn)
+		if entity and entity.provider:
+			provider_name = entity.provider
+	
+	# Get provider instance to handle webhook
+	try:
+		provider = instantiate_provider(provider_name, settings)
+	except Exception:
+		provider = None
+	
+	# If provider has specific event type handling, use it
+	if provider and hasattr(provider, 'handle_webhook'):
+		# Extract signature if present
+		signature = frappe.request.headers.get("X-Signature") or frappe.request.headers.get("x-signature")
+		result = provider.handle_webhook(payload, signature)
+		
+		if not result.get("valid"):
+			return {"status": "error", "reason": result.get("error", "Invalid webhook")}
+		
+		# If no invoice_number or IRN in result, check if it's a non-status event
+		if not result.get("invoice_number") and not result.get("irn"):
+			if event_type and event_type != "TransmissionStatusEvent":
+				return {"status": "ok", "detail": f"event type {event_type} acknowledged"}
+			return {"status": "ok", "detail": "no actionable data"}
+		
+		irn = result.get("irn")
+		status_label = result.get("status")
+		invoice_name = result.get("invoice_number")
+		
+		if not irn:
+			frappe.local.response["http_status_code"] = 400
+			return {"status": "error", "reason": "no irn in webhook result"}
+		
+		# Find invoice if not provided
+		if not invoice_name:
+			invoice_name = frappe.db.get_value("Sales Invoice", {"nrs_irn": irn}, "name")
+		
+		if not invoice_name:
+			# The event can arrive before our transmit transaction commits the
+			# IRN; a non-200 makes the platform redeliver later.
+			frappe.local.response["http_status_code"] = 404
+			return {"status": "ignored", "reason": "no invoice with this irn"}
+		
+		if not status_label:
+			return {"status": "ok", "detail": "no recognisable receipt_status; ignored"}
+		
+		# Forward-only: never downgrade on out-of-order delivery
+		current = cstr(frappe.db.get_value("Sales Invoice", invoice_name, "nrs_receipt_status"))
+		if RECEIPT_STATUS_RANK.get(status_label, 0) > RECEIPT_STATUS_RANK.get(current, 0):
+			frappe.db.set_value(
+				"Sales Invoice",
+				invoice_name,
+				{"nrs_receipt_status": status_label, "nrs_error": ""},
+				update_modified=False,
+			)
+			_logger().info(f"webhook: {invoice_name} {current or 'NONE'} -> {status_label} via {provider_name}")
+			return {"status": "ok", "updated": status_label}
+		
+		return {"status": "ok", "detail": "no change"}
+	
+	# Fallback to legacy Doftwerks webhook handling
 	if event_type and event_type != "TransmissionStatusEvent":
 		return {"status": "ok", "detail": f"event type {event_type} acknowledged"}
 
-	data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-	irn = cstr(data.get("irn")).strip()
 	if not irn:
 		frappe.local.response["http_status_code"] = 400
 		return {"status": "error", "reason": "no irn"}
@@ -535,15 +565,12 @@ def webhook():
 	# only accept events for entities configured on this site.
 	parts = irn.split("-")
 	service_id = parts[-2] if len(parts) >= 3 else None
-	settings = frappe.get_single(SETTINGS_DOCTYPE)
 	if not service_id or not any(row.service_id == service_id for row in settings.billing_entities):
 		frappe.local.response["http_status_code"] = 404
 		return {"status": "ignored", "reason": "unknown service id"}
 
 	name = frappe.db.get_value("Sales Invoice", {"nrs_irn": irn}, "name")
 	if not name:
-		# The event can arrive before our transmit transaction commits the
-		# IRN; a non-200 makes the platform redeliver later.
 		frappe.local.response["http_status_code"] = 404
 		return {"status": "ignored", "reason": "no invoice with this irn"}
 
@@ -645,55 +672,38 @@ def push_payment_status(invoice_name, settings=None):
 		# PENDING -> PARTIAL -> PAID and 400s on a no-op push
 		_logger().info(f"{invoice_name}: derived PENDING, nothing to push")
 		return {"skipped": "PENDING is not a pushable target"}
-	url = f"{cstr(settings.base_url).rstrip('/')}/api/v1/einvoice/update-status/{inv.nrs_irn}"
-	headers = {
-		"x-client-id": entity.client_id,
-		"x-client-secret": entity.get_password("client_secret"),
-		"Content-Type": "application/json",
-		"Accept": "application/json",
-	}
 
+	# Use provider for payment status update
 	try:
-		response = requests.patch(
-			url, json={"payment_status": payment_status}, headers=headers, timeout=REQUEST_TIMEOUT
-		)
-	except requests.exceptions.RequestException:
+		provider = _get_provider_for_entity(entity, settings)
+		credentials = _get_credentials(entity)
+		
+		# Check if provider has update_payment_status method, otherwise use generic approach
+		if hasattr(provider, 'update_payment_status'):
+			result = provider.update_payment_status(inv.nrs_irn, payment_status, credentials)
+		else:
+			# Fallback: try to use transmit with a status update payload or generic method
+			# For Doftwerks, we need to use the specific endpoint
+			_logger().warning(f"Provider {provider.PROVIDER_NAME} doesn't have update_payment_status method")
+			return {"error": "Provider doesn't support payment status update"}
+		
+		if result.get("success"):
+			_logger().info(f"{invoice_name}: NRS payment status -> {payment_status} via {provider.PROVIDER_NAME}")
+			return {"pushed": payment_status, "provider": provider.PROVIDER_NAME}
+		else:
+			error_msg = result.get("error", "Unknown error")
+			frappe.log_error(
+				title=f"NRS payment status push rejected for {invoice_name}",
+				message=f"Provider: {provider.PROVIDER_NAME}\nError: {error_msg}",
+			)
+			return {"error": error_msg, "provider": provider.PROVIDER_NAME}
+			
+	except Exception as e:
 		frappe.log_error(
-			title=f"NRS payment status push unreachable for {invoice_name}",
+			title=f"NRS payment status push failed for {invoice_name}",
 			message=frappe.get_traceback(),
 		)
-		return {"error": "unreachable"}
-
-	try:
-		body = response.json()
-	except ValueError:
-		body = {}
-	if not response.ok:
-		frappe.log_error(
-			title=f"NRS payment status push rejected for {invoice_name}",
-			message=f"HTTP {response.status_code}\n{cstr(response.text)[:5000]}",
-		)
-		return {"error": f"HTTP {response.status_code}", "message": cstr(body.get("message"))}
-
-	data = body.get("data") if isinstance(body.get("data"), dict) else {}
-	echoed = cstr(data.get("payment_status")).upper()
-
-	# Platform quirk: a no-op also answers code 0 / success. Trust the echoed
-	# payment_status, not the code — "paid" is terminal at NRS and a refused
-	# downgrade needs platform-side correction.
-	if echoed and echoed != payment_status:
-		frappe.log_error(
-			title=f"NRS payment status not updated for {invoice_name}",
-			message=(
-				f"Requested {payment_status} but the platform kept {echoed}. "
-				"PAID is terminal at NRS and cannot be reverted via the API; "
-				"platform-side correction is required."
-			),
-		)
-		return {"pushed": payment_status, "platform_kept": echoed}
-
-	_logger().info(f"{invoice_name}: NRS payment status -> {payment_status}")
-	return {"pushed": payment_status, "http": response.status_code, "message": cstr(body.get("message"))}
+		return {"error": str(e)}
 
 
 def _derive_payment_status(outstanding, grand_total):
@@ -729,23 +739,26 @@ def lookup_irn(irn):
 	if not entity:
 		frappe.throw(frappe._("No configured billing entity matches this IRN"))
 
-	http, body = _platform_lookup(settings, entity, irn)
-	return {"http": http, "body": body}
-
-
-def _platform_lookup(settings, entity, irn):
-	url = f"{cstr(settings.base_url).rstrip('/')}/api/v1/einvoice/lookup/{irn}"
-	headers = {
-		"x-client-id": entity.client_id,
-		"x-client-secret": entity.get_password("client_secret"),
-		"Content-Type": "application/json",
-		"Accept": "application/json",
-	}
-	response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 	try:
-		return response.status_code, response.json()
-	except ValueError:
-		return response.status_code, cstr(response.text)[:500]
+		provider = _get_provider_for_entity(entity, settings)
+		credentials = _get_credentials(entity)
+		
+		# Use provider's query_status for lookup
+		result = provider.query_status(irn, credentials)
+		
+		return {
+			"success": result.get("success"),
+			"status": result.get("status"),
+			"error": result.get("error"),
+			"raw_response": result.get("raw_response"),
+			"provider": provider.PROVIDER_NAME
+		}
+	except Exception as e:
+		frappe.log_error(
+			title=f"NRS lookup failed for IRN {irn}",
+			message=frappe.get_traceback(),
+		)
+		return {"success": False, "error": str(e)}
 
 
 # platform lookup reports transmit_status as a lowercase word
@@ -815,41 +828,44 @@ def _reconcile_one(name, settings, summary):
 	if not entity:
 		return
 
-	http, body = _platform_lookup(settings, entity, irn)
-	if not isinstance(body, dict):
-		return
-	if http != 200:
-		if cint(body.get("code")) == 23:
-			# known platform inconsistency: signed at NRS but absent from the
-			# platform record store - surface for the platform team
-			summary["missing_at_platform"] += 1
-			frappe.log_error(
-				title=f"NRS record missing for {name}",
-				message=f"lookup {irn} returned code 23 (IRN record not found)",
+	# Use provider for status query
+	try:
+		provider = _get_provider_for_entity(entity, settings)
+		credentials = _get_credentials(entity)
+		result = provider.query_status(irn, credentials)
+		
+		if not result.get("success"):
+			_logger().warning(f"Status query failed for {name}: {result.get('error')}")
+			return
+		
+		label = result.get("status")
+		if label and RECEIPT_STATUS_RANK.get(label, 0) > RECEIPT_STATUS_RANK.get(cstr(current), 0):
+			frappe.db.set_value(
+				"Sales Invoice",
+				name,
+				{"nrs_receipt_status": label, "nrs_error": ""},
+				update_modified=False,
 			)
-		return
-
-	data = body.get("data") if isinstance(body.get("data"), dict) else {}
-	label = TRANSMIT_STATUS_LABELS.get(cstr(data.get("transmit_status")).lower()) or RECEIPT_STATUS_LABELS.get(
-		cint(data.get("receipt_status"))
-	)
-	if label and RECEIPT_STATUS_RANK.get(label, 0) > RECEIPT_STATUS_RANK.get(cstr(current), 0):
-		frappe.db.set_value(
-			"Sales Invoice",
-			name,
-			{"nrs_receipt_status": label, "nrs_error": ""},
-			update_modified=False,
+			summary["advanced"] += 1
+		
+		# Check payment status if provider returned it
+		platform_pay = result.get("payment_status")
+		if platform_pay:
+			platform_pay = cstr(platform_pay).upper()
+			outstanding, grand_total = frappe.db.get_value(
+				"Sales Invoice", name, ["outstanding_amount", "grand_total"]
+			)
+			local_pay = _derive_payment_status(outstanding, grand_total)
+			if platform_pay and platform_pay != local_pay:
+				summary["payment_drift"] += 1
+				_logger().info(f"{name}: payment drift local={local_pay} platform={platform_pay}")
+				
+	except Exception as e:
+		_logger().error(f"Reconciliation error for {name}: {str(e)}")
+		frappe.log_error(
+			title=f"NRS reconciliation failed for {name}",
+			message=frappe.get_traceback(),
 		)
-		summary["advanced"] += 1
-
-	platform_pay = cstr(data.get("payment_status")).upper()
-	outstanding, grand_total = frappe.db.get_value(
-		"Sales Invoice", name, ["outstanding_amount", "grand_total"]
-	)
-	local_pay = _derive_payment_status(outstanding, grand_total)
-	if platform_pay and platform_pay != local_pay:
-		summary["payment_drift"] += 1
-		_logger().info(f"{name}: payment drift local={local_pay} platform={platform_pay}")
 
 
 def _notify_problem(doc, status, error):
@@ -885,31 +901,25 @@ def _notify_problem(doc, status, error):
 def test_connection():
 	"""Validate each billing entity's credentials against the platform.
 
-	Probe via lookup with a nonexistent IRN: code 23 / HTTP 404 proves the
-	credentials authenticated (record simply missing); code 11 / 401 / 403
-	means they did not.
+	Uses each entity's provider to test credentials via validate_credentials().
 	"""
 	frappe.only_for(("System Manager", "Accounts Manager"))
 	settings = frappe.get_single(SETTINGS_DOCTYPE)
 	results = []
 	for row in settings.billing_entities:
-		probe = f"CONNECTIONTEST-{row.service_id}-19700101"
 		try:
-			http, body = _platform_lookup(settings, row, probe)
-		except requests.exceptions.RequestException:
+			provider = _get_provider_for_entity(row, settings)
+			credentials = _get_credentials(row)
+			
+			success, message = provider.validate_credentials(credentials)
+			results.append({
+				"company": row.company, 
+				"ok": success, 
+				"detail": message,
+				"provider": provider.PROVIDER_NAME
+			})
+		except Exception as e:
 			results.append(
-				{"company": row.company, "ok": False, "detail": "Platform unreachable - check Base URL / network"}
-			)
-			continue
-		code = cint(body.get("code")) if isinstance(body, dict) else None
-		if code == 11 or http in (401, 403):
-			results.append(
-				{"company": row.company, "ok": False, "detail": "Invalid credentials - check Client ID and Client Secret"}
-			)
-		elif code == 23 or http in (200, 404):
-			results.append({"company": row.company, "ok": True, "detail": "Credentials OK"})
-		else:
-			results.append(
-				{"company": row.company, "ok": False, "detail": f"Unexpected response (HTTP {http})"}
+				{"company": row.company, "ok": False, "detail": f"Provider error: {str(e)}"}
 			)
 	return results

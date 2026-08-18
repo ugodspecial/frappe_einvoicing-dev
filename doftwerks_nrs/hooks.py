@@ -1,8 +1,8 @@
 app_name = "doftwerks_nrs"
-app_title = "Doftwerks NRS E-Invoicing"
-app_publisher = "Doftwerks West Africa Limited"
-app_description = "NRS e-invoicing for ERPNext via the Doftwerks Access Point"
-app_email = "support@doftwerks.com"
+app_title = "NRS E-Invoicing"
+app_publisher = "YoungAndCode LTD"
+app_description = "NRS e-invoicing for ERPNext"
+app_email = "info@youngandcodeltd.com"
 app_license = "mit"
 
 # Fixtures
@@ -19,7 +19,11 @@ fixtures = [
 	},
 	{
 		"dt": "Print Format",
-		"filters": [["module", "=", "Doftwerks NRS E-Invoicing"]],
+		"filters": [["module", "=", "NRS E-Invoicing"]],
+	},
+	{
+		"dt": "E-Invoice Provider",
+		"filters": [["name", "=", "doftwerks"]],
 	},
 ]
 

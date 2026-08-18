@@ -1,10 +1,9 @@
 <div align="center">
-	<img src="https://raw.githubusercontent.com/doftwerks-dev/frappe_einvoicing/main/doftwerks_nrs/public/images/nrs-einvoice-logo.png" height="120" alt="Doftwerks">
-	<h1>Doftwerks NRS E-Invoicing</h1>
-	<p>NRS-compliant e-invoicing for ERPNext, via the Doftwerks E-Invoice Access Point.</p>
+	<h1>NRS E-Invoicing</h1>
+	<p>NRS-compliant e-invoicing for ERPNext, developed by YoungAndCode LTD.</p>
 </div>
 
-Transmit Sales Invoices to the **Nigeria Revenue Service (NRS)** directly from ERPNext. On submission, invoices are validated, signed, and transmitted through the Doftwerks E-Invoice Access Point — an NRS-accredited platform — and the returned IRN, receipt status, and verification QR code are written back onto the invoice.
+Transmit Sales Invoices to the **Nigeria Revenue Service (NRS)** directly from ERPNext. On submission, invoices are validated, signed, and transmitted through an NRS-accredited Access Point — and the returned IRN, receipt status, and verification QR code are written back onto the invoice.
 
 ## Features
 
@@ -21,8 +20,8 @@ Transmit Sales Invoices to the **Nigeria Revenue Service (NRS)** directly from E
 
 ## Requirements
 
-- Frappe / ERPNext **version 15**
-- **Doftwerks E-Invoice Access Point credentials** for each legal entity (Client ID and Client Secret). The app cannot transmit without them — to get onboarded, contact [support@doftwerks.com](mailto:support@doftwerks.com), call +234 708 063 9999, or visit [doftwerks.com](https://doftwerks.com).
+- Frappe / ERPNext **version 15 or 16**
+- **NRS E-Invoice Access Point credentials** for each legal entity (Client ID and Client Secret). The app cannot transmit without them — to get onboarded, contact [info@youngandcodeltd.com](mailto:info@youngandcodeltd.com) or visit [youngandcodeltd.com](https://youngandcodeltd.com).
 
 ## Installation
 
@@ -74,4 +73,4 @@ MIT — see [license.txt](license.txt).
 
 ---
 
-Built and maintained by [Doftwerks West Africa Limited](https://doftwerks.com), the technology practice of Stransact Chartered Accountants. Doftwerks holds dual NRS accreditation as a System Integrator and Access Point Provider.
+Built and maintained by [YoungAndCode LTD](https://youngandcodeltd.com).

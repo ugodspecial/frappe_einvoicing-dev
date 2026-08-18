@@ -1,0 +1,79 @@
+{
+	"actions": [],
+	"allow_rename": 1,
+	"creation": "2026-08-17 10:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"title",
+		"module",
+		"class_path",
+		"is_active",
+		"credential_schema"
+	],
+	"fields": [
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "module",
+			"fieldtype": "Data",
+			"label": "Module",
+			"reqd": 1,
+			"default": "doftwerks_nrs",
+			"read_only": 1
+		},
+		{
+			"fieldname": "class_path",
+			"fieldtype": "Data",
+			"label": "Class Path",
+			"reqd": 1,
+			"description": "Full Python class path (e.g., doftwerks_nrs.providers.doftwerks.DoftwerksProvider)"
+		},
+		{
+			"default": "1",
+			"fieldname": "is_active",
+			"fieldtype": "Check",
+			"label": "Is Active",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "credential_schema",
+			"fieldtype": "JSON",
+			"label": "Credential Schema",
+			"description": "JSON schema for provider credential fields (auto-populated from provider class)"
+		}
+	],
+	"grid_page_length": 50,
+	"index_web_pages_for_search": 1,
+	"issingle": 0,
+	"links": [],
+	"modified": "2026-08-17 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Doftwerks NRS E-Invoicing",
+	"name": "E-Invoice Provider",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"row_format": "Dynamic",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"naming_rule": "By fieldname",
+	"autoname": "field:title"
+}

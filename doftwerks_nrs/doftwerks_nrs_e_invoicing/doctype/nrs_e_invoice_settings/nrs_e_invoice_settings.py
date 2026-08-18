@@ -21,6 +21,7 @@ class NRSEInvoiceSettings(Document):
 		base_url: DF.Data | None
 		billing_entities: DF.Table[NRSBillingEntity]
 		enabled: DF.Check
+		provider: DF.Link
 
 	# end: auto-generated types
 

@@ -7,7 +7,7 @@ Manages registration and lookup of NRS Access Point Providers.
 Providers are discovered and registered at module load time.
 """
 
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Type
 import frappe
 from .base import EInvoiceProvider
 
@@ -110,6 +110,25 @@ def instantiate_provider(
 				f"Failed to instantiate provider {provider_name}: {str(e)}"
 			)
 			raise TypeError(f"Cannot instantiate provider '{provider_name}': {str(e)}")
+
+
+@frappe.whitelist()
+def get_provider_credential_fields(provider: str) -> List[Dict]:
+	"""Get credential field schema for a provider.
+
+	Args:
+		provider: Provider name (e.g., 'doftwerks')
+
+	Returns:
+		List of field schema dicts for the provider's credentials
+	"""
+	provider_class = get_provider(provider)
+	if not provider_class:
+		frappe.throw(f"Provider '{provider}' not found")
+	
+	# Instantiate without settings to get schema
+	provider_instance = provider_class()
+	return provider_instance.get_credential_fields()
 
 
 # Register built-in providers

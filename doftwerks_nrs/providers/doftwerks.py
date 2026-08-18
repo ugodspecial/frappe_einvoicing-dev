@@ -476,6 +476,81 @@ class DoftwerksProvider(EInvoiceProvider):
 			"error": None,
 		}
 
+	def update_payment_status(self, irn: str, payment_status: str, credentials: Dict[str, Any]) -> Dict[str, Any]:
+		"""Update payment status on Doftwerks platform.
+
+		Args:
+			irn: Invoice Reference Number
+			payment_status: One of "PAID", "PARTIAL", "PENDING"
+			credentials: Dict with 'base_url', 'client_id', 'client_secret'
+
+		Returns:
+			Result dict with success, error
+		"""
+		base_url = credentials.get("base_url", "").strip()
+		client_id = credentials.get("client_id", "").strip()
+		client_secret = credentials.get("client_secret", "").strip()
+
+		if not base_url or not client_id or not client_secret:
+			return {
+				"success": False,
+				"error": "Missing Doftwerks credentials",
+			}
+
+		url = f"{base_url.rstrip('/')}/api/v1/einvoice/update-status/{irn}"
+		headers = {
+			"x-client-id": client_id,
+			"x-client-secret": client_secret,
+			"Content-Type": "application/json",
+			"Accept": "application/json",
+		}
+
+		try:
+			response = requests.patch(
+				url, json={"payment_status": payment_status}, headers=headers, timeout=self.REQUEST_TIMEOUT
+			)
+		except requests.exceptions.RequestException as e:
+			frappe.logger("nrs_doftwerks").error(f"Payment status update failed: {str(e)}")
+			return {
+				"success": False,
+				"error": f"Connection failed: {str(e)}",
+			}
+
+		try:
+			body = response.json()
+		except ValueError:
+			body = {}
+
+		if not response.ok:
+			error_msg = body.get("message", f"HTTP {response.status_code}")
+			frappe.logger("nrs_doftwerks").warning(f"Payment status update failed: {error_msg}")
+			return {
+				"success": False,
+				"error": error_msg,
+			}
+
+		data = body.get("data") if isinstance(body.get("data"), dict) else {}
+		echoed = cstr(data.get("payment_status", "")).upper()
+
+		# Platform quirk: a no-op also answers code 0 / success. Trust the echoed
+		# payment_status, not the code — "PAID" is terminal at NRS and a refused
+		# downgrade needs platform-side correction.
+		if echoed and echoed != payment_status:
+			frappe.logger("nrs_doftwerks").warning(
+				f"Payment status not updated for {irn}: requested {payment_status} but platform kept {echoed}"
+			)
+			return {
+				"success": False,
+				"error": f"Platform kept {echoed}, cannot downgrade from PAID",
+			}
+
+		frappe.logger("nrs_doftwerks").info(f"Payment status updated: irn={irn}, status={payment_status}")
+
+		return {
+			"success": True,
+			"error": None,
+		}
+
 	def get_friendly_error(self, raw_error: str) -> str:
 		"""Convert Doftwerks error to user-friendly message.
 

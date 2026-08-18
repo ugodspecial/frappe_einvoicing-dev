@@ -21,6 +21,8 @@ class NRSBillingEntity(Document):
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
+		provider: DF.Link
+		provider_credentials_json: DF.JSON | None
 		service_id: DF.Data
 		supplier_business_description: DF.Data | None
 		supplier_city: DF.Data | None

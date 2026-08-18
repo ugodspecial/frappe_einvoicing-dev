@@ -76,7 +76,7 @@ class EInvoiceProvider(ABC):
 		pass
 
 	@abstractmethod
-	def parse_response(self, response: Any) -> Dict[str, Any]:
+	def parse_response(self, response: Any, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 		"""Parse provider-specific API response into standard format.
 
 		This is called by transmit() to normalize the provider's response.
@@ -84,6 +84,7 @@ class EInvoiceProvider(ABC):
 
 		Args:
 			response: Provider's HTTP response object (requests.Response or similar).
+			payload: Original NRS payload (used for fallback values like IRN).
 
 		Returns:
 			Standard result dict (same structure as transmit()).
@@ -200,3 +201,26 @@ class EInvoiceProvider(ABC):
 			result: The result dict returned from transmit().
 		"""
 		pass
+
+	def update_payment_status(self, irn: str, payment_status: str, credentials: Dict[str, Any]) -> Dict[str, Any]:
+		"""Update payment status on provider platform (optional).
+
+		Some providers may support updating payment status separately from
+		invoice transmission. Override in subclasses if supported.
+
+		Args:
+			irn: Invoice Reference Number
+			payment_status: One of "PAID", "PARTIAL", "PENDING"
+			credentials: Provider-specific credentials
+
+		Returns:
+			Result dict:
+			{
+				'success': bool,
+				'error': str or None,
+			}
+		"""
+		return {
+			"success": False,
+			"error": "Payment status update not supported by this provider",
+		}
